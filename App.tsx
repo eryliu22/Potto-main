@@ -14,6 +14,7 @@ const App: React.FC = () => {
   // Modals / Interstitials
   const [showSettings, setShowSettings] = useState(false);
   const [showBreathingBreak, setShowBreathingBreak] = useState(false);
+  const [isManualBreath, setIsManualBreath] = useState(false);
   const [isCountingDownToDive, setIsCountingDownToDive] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState(10);
   const [rotStartTime, setRotStartTime] = useState<number | null>(null);
@@ -101,6 +102,7 @@ const App: React.FC = () => {
     if (activeRotting && !showBreathingBreak) {
       breakInterval = setInterval(() => {
         setShowBreathingBreak(true);
+        setIsManualBreath(false); // Auto-triggered
         setCountdownSeconds(10);
       }, BREAK_INTERVAL * 1000);
     }
@@ -115,12 +117,14 @@ const App: React.FC = () => {
       if (isCountingDownToDive) {
         setIsCountingDownToDive(false);
         setActiveRotting(true);
-      } else if (showBreathingBreak) {
+      } else if (showBreathingBreak && !isManualBreath) {
+        // Auto-triggered breathing break - auto close
         setShowBreathingBreak(false);
       }
+      // Manual breathing break stays open until user chooses
     }
     return () => clearTimeout(timer);
-  }, [isCountingDownToDive, showBreathingBreak, countdownSeconds]);
+  }, [isCountingDownToDive, showBreathingBreak, countdownSeconds, isManualBreath]);
 
   const addTask = (title: string, description?: string, credit: number = 5) => {
     if (!title.trim()) return;
@@ -170,6 +174,12 @@ const App: React.FC = () => {
     setIsCountingDownToDive(false);
     setShowBreathingBreak(false);
     if (isCountingDownToDive) setActiveRotting(true);
+  };
+
+  const handleManualBreath = () => {
+    setShowBreathingBreak(true);
+    setIsManualBreath(true);
+    setCountdownSeconds(10);
   };
 
   const saveSettings = () => {
@@ -372,7 +382,14 @@ const App: React.FC = () => {
               <Icons.Anchor className="w-5 h-5" />
               <span className="text-xs font-bold uppercase tracking-widest">{isLocked ? 'Duty Lock Active' : isTimeOut ? 'No Air' : 'Dive into Socials'}</span>
             </button>
-            {activeRotting && <button onClick={() => setActiveRotting(false)} className="w-full py-5 bg-potto-blue text-white rounded-full soft-shadow animate-pulse text-xs font-bold uppercase tracking-widest">Surface to Air</button>}
+            {activeRotting && (
+              <>
+                <button onClick={handleManualBreath} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-full soft-shadow text-xs font-bold uppercase tracking-widest hover:text-potto-blue hover:border-potto-blue/30 transition-all active:scale-95">
+                  Take a Breath
+                </button>
+                <button onClick={() => { setActiveRotting(false); setShowBreathingBreak(false); setIsManualBreath(false); }} className="w-full py-5 bg-potto-blue text-white rounded-full soft-shadow animate-pulse text-xs font-bold uppercase tracking-widest">Surface to Air</button>
+              </>
+            )}
           </div>
         )}
 
@@ -458,7 +475,33 @@ const App: React.FC = () => {
           </div>
           <h2 className="text-xl font-light tracking-widest mb-4">Quiet Breath.</h2>
           <p className="text-slate-400 text-xs max-w-xs leading-loose mb-12">Take a moment to center yourself before moving forward.</p>
-          <button onClick={skipProcess} className="text-[10px] font-bold uppercase tracking-widest text-slate-300 hover:text-rose-300 p-4">Skip Countdown (-5m Air)</button>
+          <div className="flex flex-col gap-3 items-center">
+            {showBreathingBreak && isManualBreath && countdownSeconds === 0 && (
+              <div className="flex gap-3">
+                <button onClick={() => { setShowBreathingBreak(false); setIsManualBreath(false); }} className="px-6 py-3 bg-white border border-slate-200 text-slate-500 rounded-full text-xs font-bold uppercase tracking-widest hover:text-potto-blue hover:border-potto-blue/30 transition-all">
+                  Return to Socials
+                </button>
+                <button onClick={() => { 
+                  // Reward 2 minutes for choosing to surface after breathing break
+                  setState(prev => ({
+                    ...prev,
+                    dailyAllowanceRemaining: Math.min(prev.dailyLimitSeconds, prev.dailyAllowanceRemaining + (2 * 60))
+                  }));
+                  setActiveRotting(false); 
+                  setShowBreathingBreak(false); 
+                  setIsManualBreath(false); 
+                }} className="px-6 py-3 bg-potto-blue text-white rounded-full text-xs font-bold uppercase tracking-widest">
+                  Surface to Air (+2m)
+                </button>
+              </div>
+            )}
+            {countdownSeconds > 0 && (
+              <button onClick={() => {
+                skipProcess();
+                setIsManualBreath(false);
+              }} className="text-[10px] font-bold uppercase tracking-widest text-slate-300 hover:text-rose-300 p-4">Skip Countdown (-5m Air)</button>
+            )}
+          </div>
         </div>
       )}
 
