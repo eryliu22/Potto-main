@@ -1,0 +1,7 @@
+{
+  "name": "Potto",
+  "description": "A Korean minimalist anchor for your focus. Stay grounded, avoid the rot, and dive only when your duties are done.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

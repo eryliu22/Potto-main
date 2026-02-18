@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Potto — Anchored</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #F9F9F9;
+            color: #4A4A4A;
+            margin: 0;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .soft-glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .soft-shadow {
+            box-shadow: 0 10px 30px -10px rgba(167, 187, 199, 0.2);
+        }
+
+        .rounded-4xl {
+            border-radius: 32px;
+        }
+
+        .bg-potto-blue { background-color: #A7BBC7; }
+        .text-potto-blue { color: #A7BBC7; }
+        .border-potto-blue { border-color: #A7BBC7; }
+
+        .grayscale-mode {
+            filter: grayscale(100%) brightness(0.95);
+            transition: filter 1s ease-in-out;
+        }
+
+        @keyframes drift {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-5px) rotate(2deg); }
+        }
+        .animate-drift { animation: drift 6s ease-in-out infinite; }
+
+        /* Custom Checkbox */
+        input[type="checkbox"] {
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #E2E8F0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        input[type="checkbox"]:checked {
+            background-color: #A7BBC7;
+            border-color: #A7BBC7;
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
