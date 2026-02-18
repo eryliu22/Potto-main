@@ -41,6 +41,7 @@ export interface AppState {
   dailyLimitSeconds: number;
   distractionApps: string[];
   recoveryApps: string[];
+  customApps: string[];
   userName: string;
   userColor: string;
   userAddedTaskHistory: string[];

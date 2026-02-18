@@ -3,6 +3,8 @@ import React from 'react';
 
 export const MIN_LIMIT = 5 * 60;
 export const MAX_LIMIT = 60 * 60;
+export const MIN_LIMIT_MINUTES = 5;
+export const MAX_LIMIT_MINUTES = 60;
 export const DEFAULT_LIMIT = 30 * 60;
 export const BREAK_INTERVAL = 5 * 60; // 5 minutes
 
@@ -14,10 +16,17 @@ export const DAILY_DEFAULTS = [
 ];
 
 export const AVAILABLE_APPS = [
-  "Instagram", "TikTok", "Facebook", "Reddit", "Twitter", "Snapchat", 
-  "YouTube", "Netflix", "Discord", "Twitch", "Pinterest", "LinkedIn",
-  "Forest", "Notion", "Anki", "Duolingo", "Slack", "Zoom", "Calendar", 
-  "Books", "Messages", "Notes", "Spotify"
+  "Instagram",
+  "Rednote",
+  "Facebook",
+  "Wechat",
+  "Twitter",
+  "YouTube",
+  "Anki",
+  "Duolingo",
+  "Books",
+  "Notes",
+  "Calendar"
 ];
 
 export const Icons = {

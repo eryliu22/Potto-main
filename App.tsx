@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { View, Task, AppState, AppUsage, Circle, CircleMember } from './types';
-import { Icons, DEFAULT_LIMIT, MIN_LIMIT, MAX_LIMIT, DAILY_DEFAULTS, BREAK_INTERVAL, AVAILABLE_APPS } from './constants';
+import { Icons, DEFAULT_LIMIT, MIN_LIMIT, MAX_LIMIT, MIN_LIMIT_MINUTES, MAX_LIMIT_MINUTES, DAILY_DEFAULTS, BREAK_INTERVAL, AVAILABLE_APPS } from './constants';
 
 // Define avatar colors for the settings selection
 const AVATAR_COLORS = ['#A7BBC7', '#D8E2DC', '#EAE4E9', '#FDE2E4', '#FAD2E1', '#E2ECE9', '#BEE1E6'];
@@ -25,10 +25,21 @@ const App: React.FC = () => {
   
   // Fix: Added missing state for new task input (lines 316-317)
   const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [addingAppTo, setAddingAppTo] = useState<'distraction' | 'recovery' | null>(null);
+  const [newAppName, setNewAppName] = useState('');
 
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem('potto_v9_state');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        ...parsed,
+        // Backward-compat for older saved states
+        customApps: parsed.customApps ?? [],
+        distractionApps: parsed.distractionApps ?? ['Instagram', 'Rednote', 'Facebook', 'Wechat', 'Twitter', 'YouTube'],
+        recoveryApps: parsed.recoveryApps ?? ['Anki', 'Duolingo', 'Books', 'Notes', 'Calendar'],
+      };
+    }
     
     return {
       dailyAllowanceRemaining: DEFAULT_LIMIT,
@@ -47,8 +58,9 @@ const App: React.FC = () => {
       ],
       lastUsedTimestamp: Date.now(),
       dailyLimitSeconds: DEFAULT_LIMIT,
-      distractionApps: ['Instagram', 'Reddit', 'TikTok'],
-      recoveryApps: ['Anki', 'Notion', 'Forest'],
+      distractionApps: ['Instagram', 'Rednote', 'Facebook', 'Wechat', 'Twitter', 'YouTube'],
+      recoveryApps: ['Anki', 'Duolingo', 'Books', 'Notes', 'Calendar'],
+      customApps: [],
       userName: 'Potter',
       userColor: '#A7BBC7',
       userAddedTaskHistory: [],
@@ -62,6 +74,21 @@ const App: React.FC = () => {
   const [settingsColor, setSettingsColor] = useState(state.userColor);
   const [settingsDistraction, setSettingsDistraction] = useState(state.distractionApps);
   const [settingsRecovery, setSettingsRecovery] = useState(state.recoveryApps);
+  const [customAppsDraft, setCustomAppsDraft] = useState<string[]>(state.customApps ?? []);
+
+  const selectableApps = useMemo(() => {
+    const combined = [...AVAILABLE_APPS, ...customAppsDraft];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const a of combined) {
+      const key = a.trim().toLowerCase();
+      if (!key) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(a.trim());
+    }
+    return out;
+  }, [customAppsDraft]);
 
   useEffect(() => {
     localStorage.setItem('potto_v9_state', JSON.stringify(state));
@@ -70,10 +97,14 @@ const App: React.FC = () => {
   useEffect(() => {
     if (showSettings) {
       setSettingsName(state.userName);
-      setSettingsLimit(state.dailyLimitSeconds / 60);
+      const limitMinutes = state.dailyLimitSeconds / 60;
+      setSettingsLimit(Math.min(MAX_LIMIT_MINUTES, Math.max(MIN_LIMIT_MINUTES, limitMinutes)));
       setSettingsColor(state.userColor);
       setSettingsDistraction(state.distractionApps);
       setSettingsRecovery(state.recoveryApps);
+      setCustomAppsDraft(state.customApps ?? []);
+      setAddingAppTo(null);
+      setNewAppName('');
     }
   }, [showSettings, state]);
 
@@ -182,16 +213,59 @@ const App: React.FC = () => {
     setCountdownSeconds(10);
   };
 
+  const startNewDay = () => {
+    setState(prev => ({
+      ...prev,
+      dailyAllowanceRemaining: prev.dailyLimitSeconds,
+      tasks: DAILY_DEFAULTS.map(d => ({
+        id: Math.random().toString(36).substr(2, 9),
+        title: d.title,
+        description: d.description,
+        difficulty: 'Medium' as const,
+        creditMinutes: d.credit,
+        isCompleted: false
+      })),
+      appUsage: prev.appUsage.map(app => ({ ...app, minutesUsed: 0 })),
+      lastUsedTimestamp: Date.now()
+    }));
+    setActiveRotting(false);
+    setShowBreathingBreak(false);
+    setIsManualBreath(false);
+    setIsCountingDownToDive(false);
+  };
+
   const saveSettings = () => {
+    const clampedMinutes = Math.min(MAX_LIMIT_MINUTES, Math.max(MIN_LIMIT_MINUTES, Math.round(settingsLimit)));
     setState(prev => ({
       ...prev,
       userName: settingsName,
-      dailyLimitSeconds: settingsLimit * 60,
+      dailyLimitSeconds: clampedMinutes * 60,
       userColor: settingsColor,
       distractionApps: settingsDistraction,
       recoveryApps: settingsRecovery,
+      customApps: customAppsDraft,
     }));
     setShowSettings(false);
+  };
+
+  const addCustomApp = (listType: 'distraction' | 'recovery') => {
+    const cleaned = newAppName.trim().replace(/\s+/g, ' ');
+    if (!cleaned) return;
+    const key = cleaned.toLowerCase();
+
+    setCustomAppsDraft(prev => {
+      const has = prev.some(a => a.trim().toLowerCase() === key) || AVAILABLE_APPS.some(a => a.trim().toLowerCase() === key);
+      return has ? prev : [cleaned, ...prev];
+    });
+
+    if (listType === 'distraction') {
+      setSettingsDistraction(prev => (prev.some(a => a.trim().toLowerCase() === key) ? prev : [cleaned, ...prev]));
+    } else {
+      setSettingsRecovery(prev => (prev.some(a => a.trim().toLowerCase() === key) ? prev : [cleaned, ...prev]));
+    }
+
+    setNewAppName('');
+    setAddingAppTo(null);
   };
 
   const toggleAppSelection = (listType: 'distraction' | 'recovery', appName: string) => {
@@ -287,6 +361,11 @@ const App: React.FC = () => {
 
       {/* Header */}
       <header className="pt-12 pb-6 flex flex-col items-center gap-2 relative">
+        {view === View.DUTIES && (
+          <button onClick={startNewDay} className="absolute right-6 top-14 text-[10px] font-bold uppercase tracking-widest text-slate-300 hover:text-potto-blue transition-colors py-2 px-3">
+            New Day to Sail
+          </button>
+        )}
         {view === View.SOCIAL && (
           <button onClick={() => setShowSettings(true)} className="absolute left-6 top-14 text-slate-300 hover:text-potto-blue transition-colors p-2">
             <Icons.Settings className="w-5 h-5" />
@@ -361,7 +440,7 @@ const App: React.FC = () => {
                 </svg>
                 <div className="text-center z-10">
                   <span className={`text-5xl font-light block tabular-nums tracking-tighter ${isTimeOut ? 'text-rose-300' : 'text-slate-600'}`}>{formatTime(state.dailyAllowanceRemaining)}</span>
-                  <span className="text-[10px] uppercase tracking-widest text-slate-300 font-bold mt-1 block">Current Air</span>
+                  <span className="text-[10px] uppercase tracking-widest text-slate-300 font-bold mt-1 block">Air Remaining to Dive</span>
                 </div>
               </div>
             </div>
@@ -380,14 +459,14 @@ const App: React.FC = () => {
 
             <button disabled={isLocked || isTimeOut} onClick={() => { setIsCountingDownToDive(true); setCountdownSeconds(10); }} className={`w-full py-5 rounded-full soft-shadow flex items-center justify-center gap-3 border transition-all ${isLocked || isTimeOut ? 'bg-slate-50 text-slate-200 border-slate-100 opacity-50' : 'bg-white border-slate-100 text-slate-400 hover:text-potto-blue active:scale-95'}`}>
               <Icons.Anchor className="w-5 h-5" />
-              <span className="text-xs font-bold uppercase tracking-widest">{isLocked ? 'Duty Lock Active' : isTimeOut ? 'No Air' : 'Dive into Socials'}</span>
+              <span className="text-xs font-bold uppercase tracking-widest">{isLocked ? 'Duty Lock Active' : isTimeOut ? 'Out of Air' : 'Dive into Socials'}</span>
             </button>
             {activeRotting && (
               <>
                 <button onClick={handleManualBreath} className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-full soft-shadow text-xs font-bold uppercase tracking-widest hover:text-potto-blue hover:border-potto-blue/30 transition-all active:scale-95">
                   Take a Breath
                 </button>
-                <button onClick={() => { setActiveRotting(false); setShowBreathingBreak(false); setIsManualBreath(false); }} className="w-full py-5 bg-potto-blue text-white rounded-full soft-shadow animate-pulse text-xs font-bold uppercase tracking-widest">Surface to Air</button>
+                <button onClick={() => { setActiveRotting(false); setShowBreathingBreak(false); setIsManualBreath(false); }} className="w-full py-5 bg-potto-blue text-white rounded-full soft-shadow animate-pulse text-xs font-bold uppercase tracking-widest">Surface for Air</button>
               </>
             )}
           </div>
@@ -491,7 +570,7 @@ const App: React.FC = () => {
                   setShowBreathingBreak(false); 
                   setIsManualBreath(false); 
                 }} className="px-6 py-3 bg-potto-blue text-white rounded-full text-xs font-bold uppercase tracking-widest">
-                  Surface to Air (+2m)
+                  Surface for Air (+2m)
                 </button>
               </div>
             )}
@@ -528,28 +607,63 @@ const App: React.FC = () => {
                     ))}
                   </div>
                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] uppercase font-bold text-slate-300 tracking-widest">Daily Social Time</label>
+                  <div className="flex items-center gap-4">
+                    <input
+                      type="range"
+                      min={MIN_LIMIT_MINUTES}
+                      max={MAX_LIMIT_MINUTES}
+                      value={Math.min(MAX_LIMIT_MINUTES, Math.max(MIN_LIMIT_MINUTES, Math.round(settingsLimit)))}
+                      onChange={e => setSettingsLimit(Number(e.target.value))}
+                      className="flex-1 h-2 bg-slate-100 rounded-full appearance-none cursor-pointer accent-potto-blue [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#A7BBC7] [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow [&::-moz-range-thumb]:w-5 [&::-moz-range-thumb]:h-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#A7BBC7] [&::-moz-range-thumb]:border-0"
+                    />
+                    <span className="text-sm font-bold text-slate-500 tabular-nums w-10">{Math.min(MAX_LIMIT_MINUTES, Math.max(MIN_LIMIT_MINUTES, Math.round(settingsLimit)))} min</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400">Min {MIN_LIMIT_MINUTES} · Max {MAX_LIMIT_MINUTES} minutes per day</p>
+                </div>
               </div>
 
               <div className="space-y-4">
                 <label className="text-[10px] uppercase font-bold text-slate-300 tracking-widest">Distraction Apps</label>
                 <div className="flex flex-wrap gap-2">
-                  {AVAILABLE_APPS.map(app => (
+                  {selectableApps.map(app => (
                     <button key={app} onClick={() => toggleAppSelection('distraction', app)} className={`px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${settingsDistraction.includes(app) ? 'bg-rose-50 border-rose-100 text-rose-400' : 'bg-white border-slate-100 text-slate-300'}`}>
                       {app}
                     </button>
                   ))}
+                  <button onClick={() => { setAddingAppTo('distraction'); setNewAppName(''); }} className="px-3 py-1.5 rounded-full text-[10px] font-bold border border-slate-100 text-slate-300 bg-white hover:border-potto-blue/30 hover:text-potto-blue transition-all">
+                    +
+                  </button>
                 </div>
+                {addingAppTo === 'distraction' && (
+                  <div className="flex gap-2">
+                    <input value={newAppName} onChange={e => setNewAppName(e.target.value)} placeholder="Add app name" className="flex-1 bg-slate-50 rounded-xl p-3 text-xs outline-none focus:ring-1 ring-potto-blue/20" />
+                    <button onClick={() => addCustomApp('distraction')} className="px-4 bg-potto-blue text-white rounded-xl text-xs font-bold">Add</button>
+                    <button onClick={() => { setAddingAppTo(null); setNewAppName(''); }} className="px-4 bg-slate-100 text-slate-400 rounded-xl text-xs font-bold">Cancel</button>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-4">
                 <label className="text-[10px] uppercase font-bold text-slate-300 tracking-widest">Safe Apps</label>
                 <div className="flex flex-wrap gap-2">
-                  {AVAILABLE_APPS.map(app => (
+                  {selectableApps.map(app => (
                     <button key={app} onClick={() => toggleAppSelection('recovery', app)} className={`px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${settingsRecovery.includes(app) ? 'bg-potto-blue/10 border-potto-blue/20 text-potto-blue' : 'bg-white border-slate-100 text-slate-300'}`}>
                       {app}
                     </button>
                   ))}
+                  <button onClick={() => { setAddingAppTo('recovery'); setNewAppName(''); }} className="px-3 py-1.5 rounded-full text-[10px] font-bold border border-slate-100 text-slate-300 bg-white hover:border-potto-blue/30 hover:text-potto-blue transition-all">
+                    +
+                  </button>
                 </div>
+                {addingAppTo === 'recovery' && (
+                  <div className="flex gap-2">
+                    <input value={newAppName} onChange={e => setNewAppName(e.target.value)} placeholder="Add app name" className="flex-1 bg-slate-50 rounded-xl p-3 text-xs outline-none focus:ring-1 ring-potto-blue/20" />
+                    <button onClick={() => addCustomApp('recovery')} className="px-4 bg-potto-blue text-white rounded-xl text-xs font-bold">Add</button>
+                    <button onClick={() => { setAddingAppTo(null); setNewAppName(''); }} className="px-4 bg-slate-100 text-slate-400 rounded-xl text-xs font-bold">Cancel</button>
+                  </div>
+                )}
               </div>
 
               <button onClick={saveSettings} className="w-full py-5 bg-potto-blue text-white rounded-full text-xs font-bold uppercase tracking-widest mb-4">Save Configuration</button>
