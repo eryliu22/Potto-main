@@ -36,6 +36,7 @@ const App: React.FC = () => {
         ...parsed,
         // Backward-compat for older saved states
         customApps: parsed.customApps ?? [],
+        rotLastUpdatedAt: parsed.rotLastUpdatedAt ?? null,
         distractionApps: parsed.distractionApps ?? ['Instagram', 'Rednote', 'Facebook', 'Wechat', 'Twitter', 'YouTube'],
         recoveryApps: parsed.recoveryApps ?? ['Anki', 'Duolingo', 'Books', 'Notes', 'Calendar'],
       };
@@ -57,6 +58,7 @@ const App: React.FC = () => {
         { name: 'Reddit', minutesUsed: 0, limitMinutes: 30 }
       ],
       lastUsedTimestamp: Date.now(),
+      rotLastUpdatedAt: null,
       dailyLimitSeconds: DEFAULT_LIMIT,
       distractionApps: ['Instagram', 'Rednote', 'Facebook', 'Wechat', 'Twitter', 'YouTube'],
       recoveryApps: ['Anki', 'Duolingo', 'Books', 'Notes', 'Calendar'],
@@ -114,12 +116,23 @@ const App: React.FC = () => {
     if (activeRotting && state.dailyAllowanceRemaining > 0 && !showBreathingBreak) {
       interval = setInterval(() => {
         setState(prev => {
-          const nextVal = Math.max(0, prev.dailyAllowanceRemaining - 1);
+          const now = Date.now();
+          const last = prev.rotLastUpdatedAt ?? now;
+          const deltaSeconds = Math.floor((now - last) / 1000);
+          if (deltaSeconds <= 0) {
+            return { ...prev, rotLastUpdatedAt: now };
+          }
+          const remaining = Math.max(0, prev.dailyAllowanceRemaining - deltaSeconds);
           const updatedUsage = prev.appUsage.map(app => ({
             ...app,
-            minutesUsed: app.minutesUsed + (1 / 60)
+            minutesUsed: app.minutesUsed + deltaSeconds / 60
           }));
-          return { ...prev, dailyAllowanceRemaining: nextVal, appUsage: updatedUsage };
+          return {
+            ...prev,
+            dailyAllowanceRemaining: remaining,
+            appUsage: updatedUsage,
+            rotLastUpdatedAt: now
+          };
         });
       }, 1000);
     } else if (state.dailyAllowanceRemaining <= 0 && activeRotting) {
@@ -127,6 +140,13 @@ const App: React.FC = () => {
     }
     return () => clearInterval(interval);
   }, [activeRotting, state.dailyAllowanceRemaining, showBreathingBreak]);
+
+  // When a break ends while still rotting, reset the timing baseline so break time doesn't consume air
+  useEffect(() => {
+    if (!showBreathingBreak && activeRotting) {
+      setState(prev => ({ ...prev, rotLastUpdatedAt: Date.now() }));
+    }
+  }, [showBreathingBreak, activeRotting]);
 
   useEffect(() => {
     let breakInterval: any;
@@ -226,7 +246,8 @@ const App: React.FC = () => {
         isCompleted: false
       })),
       appUsage: prev.appUsage.map(app => ({ ...app, minutesUsed: 0 })),
-      lastUsedTimestamp: Date.now()
+      lastUsedTimestamp: Date.now(),
+      rotLastUpdatedAt: null
     }));
     setActiveRotting(false);
     setShowBreathingBreak(false);

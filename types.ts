@@ -37,6 +37,8 @@ export interface AppState {
   tasks: Task[];
   appUsage: AppUsage[];
   lastUsedTimestamp: number;
+  // Rotting session timing
+  rotLastUpdatedAt: number | null;
   // New Settings
   dailyLimitSeconds: number;
   distractionApps: string[];
