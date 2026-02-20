@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Task, AppState, AppUsage, Circle, CircleMember } from './types';
 import { Icons, DEFAULT_LIMIT, MIN_LIMIT, MAX_LIMIT, MIN_LIMIT_MINUTES, MAX_LIMIT_MINUTES, DAILY_DEFAULTS, BREAK_INTERVAL, AVAILABLE_APPS } from './constants';
 
@@ -78,6 +78,9 @@ const App: React.FC = () => {
   const [settingsRecovery, setSettingsRecovery] = useState(state.recoveryApps);
   const [customAppsDraft, setCustomAppsDraft] = useState<string[]>(state.customApps ?? []);
 
+  // Track if we've already restored the rotting state on mount
+  const hasRestoredRotting = useRef(false);
+
   const selectableApps = useMemo(() => {
     const combined = [...AVAILABLE_APPS, ...customAppsDraft];
     const seen = new Set<string>();
@@ -95,6 +98,50 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('potto_v9_state', JSON.stringify(state));
   }, [state]);
+
+  // Restore activeRotting state when app loads if there was an active rotting session
+  useEffect(() => {
+    // Only restore once on mount
+    if (hasRestoredRotting.current) return;
+    hasRestoredRotting.current = true;
+
+    // Check if there was an active rotting session when the tab was closed
+    const rotLastUpdatedAt = state.rotLastUpdatedAt;
+    const dailyAllowanceRemaining = state.dailyAllowanceRemaining;
+    
+    if (rotLastUpdatedAt && dailyAllowanceRemaining > 0) {
+      const now = Date.now();
+      const last = rotLastUpdatedAt;
+      const deltaSeconds = Math.floor((now - last) / 1000);
+      
+      // If less than 6 minutes passed, restore the rotting session
+      // This prevents restoring sessions that were closed a long time ago
+      // Using 6 minutes to account for time switching between apps and websites
+      if (deltaSeconds > 0 && deltaSeconds < 360) {
+        // Immediately account for time that passed while tab was closed
+        setState(prev => {
+          const remaining = Math.max(0, prev.dailyAllowanceRemaining - deltaSeconds);
+          const updatedUsage = prev.appUsage.map(app => ({
+            ...app,
+            minutesUsed: app.minutesUsed + deltaSeconds / 60
+          }));
+          return {
+            ...prev,
+            dailyAllowanceRemaining: remaining,
+            appUsage: updatedUsage,
+            rotLastUpdatedAt: now
+          };
+        });
+        
+        // Restore activeRotting state
+        setActiveRotting(true);
+      } else if (deltaSeconds >= 360) {
+        // If more than 6 minutes passed, clear the rotting session
+        setState(prev => ({ ...prev, rotLastUpdatedAt: null }));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run on mount
 
   useEffect(() => {
     if (showSettings) {
